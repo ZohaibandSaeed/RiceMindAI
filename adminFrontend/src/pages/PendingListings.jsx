@@ -81,7 +81,7 @@ export default function PendingListings() {
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-white mb-2 leading-tight">{listing.name}</h3>
                   <div className="flex items-center gap-4 text-xs font-bold text-zinc-400 uppercase tracking-wide mb-4">
-                    <span className="bg-[#27272a] px-2 py-1 rounded text-white font-mono">{listing.stock_kg} Mound</span>
+                    <span className="bg-[#27272a] px-2 py-1 rounded text-white font-mono">{listing.stock_kg} KG</span>
                     <span className="text-green-400">PKR {listing.suggested_price}/KG</span>
                   </div>
 

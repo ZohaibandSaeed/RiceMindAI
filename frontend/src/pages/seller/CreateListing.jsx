@@ -121,13 +121,13 @@ export default function CreateListing() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Price per MOUND (PKR)</label>
+              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Price per KG (PKR)</label>
               <input required name="suggested_price" value={form.suggested_price} onChange={handleChange} type="number" min="1"
                 className="w-full px-3.5 py-2.5 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] text-sm"
                 placeholder="e.g. 250" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Stock (MOUND)</label>
+              <label className="block text-sm font-semibold text-zinc-700 mb-1.5">Stock (KG)</label>
               <input required name="stock_kg" value={form.stock_kg} onChange={handleChange} type="number" min="1"
                 className="w-full px-3.5 py-2.5 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/30 focus:border-[#1a3d2b] text-sm"
                 placeholder="e.g. 500" />

@@ -9,7 +9,7 @@ export default function ListingDetail() {
   const [listing, setListing] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  
+
   // Ordering state
   const [quantity, setQuantity] = useState('')
   const [orderSubmitting, setOrderSubmitting] = useState(false)
@@ -29,7 +29,7 @@ export default function ListingDetail() {
     e.preventDefault()
     setOrderError(null)
     setOrderSubmitting(true)
-    
+
     const qty = parseFloat(quantity)
     if (isNaN(qty) || qty <= 0) {
       setOrderError("Please enter a valid quantity")
@@ -78,27 +78,27 @@ export default function ListingDetail() {
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+
         {/* Left: Images */}
         <div className="space-y-4">
           <div className="bg-zinc-100 rounded-2xl overflow-hidden aspect-[4/3] relative group border border-zinc-200">
             {listing.images && listing.images.length > 0 ? (
               <>
-                <img 
-                  src={listing.images[currentImageIndex]} 
-                  alt={listing.name} 
+                <img
+                  src={listing.images[currentImageIndex]}
+                  alt={listing.name}
                   className="w-full h-full object-cover"
                 />
-                
+
                 {listing.images.length > 1 && (
                   <>
-                    <button 
+                    <button
                       onClick={() => setCurrentImageIndex((prev) => prev === 0 ? listing.images.length - 1 : prev - 1)}
                       className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
                     >
                       <ChevronLeft size={20} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setCurrentImageIndex((prev) => prev === listing.images.length - 1 ? 0 : prev + 1)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
                     >
@@ -106,11 +106,11 @@ export default function ListingDetail() {
                     </button>
                   </>
                 )}
-                
+
                 <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
                   {listing.images.map((img, i) => (
-                    <button 
-                      key={i} 
+                    <button
+                      key={i}
                       onClick={() => setCurrentImageIndex(i)}
                       className={`w-2 h-2 rounded-full transition-all ${i === currentImageIndex ? 'bg-white w-4' : 'bg-white/50'}`}
                     />
@@ -121,11 +121,11 @@ export default function ListingDetail() {
               <div className="w-full h-full flex items-center justify-center text-zinc-400">No Image</div>
             )}
           </div>
-          
+
           <div className="grid grid-cols-5 gap-2">
             {listing.images.map((img, i) => (
-              <button 
-                key={i} 
+              <button
+                key={i}
                 onClick={() => setCurrentImageIndex(i)}
                 className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${i === currentImageIndex ? 'border-[#1a3d2b]' : 'border-transparent opacity-60 hover:opacity-100'}`}
               >
@@ -169,7 +169,7 @@ export default function ListingDetail() {
               <Sparkles size={18} />
               AI Quality Assessment
             </div>
-            
+
             {listing.ai_quality_score ? (
               <>
                 <div className="flex items-center gap-3">
@@ -194,9 +194,9 @@ export default function ListingDetail() {
               <div>
                 <label className="block text-sm font-semibold text-zinc-700 mb-1">Quantity Required (KG)</label>
                 <div className="relative">
-                  <input 
-                    type="number" 
-                    min="1" 
+                  <input
+                    type="number"
+                    min="1"
                     max={listing.stock_kg}
                     step="0.1"
                     required
@@ -218,15 +218,15 @@ export default function ListingDetail() {
 
               {orderError && <p className="text-sm text-red-500 font-medium bg-red-50 p-3 rounded-lg">{orderError}</p>}
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={orderSubmitting || !quantity || quantity > listing.stock_kg}
                 className="w-full py-3.5 bg-[#1a3d2b] text-white font-bold rounded-xl hover:bg-[#1a3d2b]/90 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 transition-all"
               >
                 {orderSubmitting ? <Loader2 size={20} className="animate-spin" /> : <Package size={20} />}
                 Place Initial Order
               </button>
-              
+
               <p className="text-xs text-center text-zinc-500">
                 You will not be charged yet. The seller will create a contract for you to review and sign before payment is held in escrow.
               </p>
