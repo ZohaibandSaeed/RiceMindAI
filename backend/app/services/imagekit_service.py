@@ -11,7 +11,7 @@ def get_imagekit_auth_params() -> dict:
     We generate the signature ourselves for direct frontend uploads.
     """
     token = secrets.token_hex(16)
-    expire = int(time.time()) + 3600  # 1 hour from now
+    expire = int(time.time()) + 1800  # 30 minutes from now (must be less than 1 hour)
 
     # HMAC-SHA1 signature
     signature = hmac.new(

@@ -3,6 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func
+from datetime import datetime, timedelta
+from app.models.order import Order
+from app.models.contract import Contract
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -132,3 +135,68 @@ async def charge_wallet(
         
     await db.commit()
     return {"message": f"Successfully modified wallet balance.", "new_balance": float(wallet.balance)}
+
+
+@router.get("/deals")
+async def get_deals_monitor(
+    start_date: str = None,
+    end_date: str = None,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    from sqlalchemy.orm import aliased
+    Buyer = aliased(User, name="buyer")
+    Seller = aliased(User, name="seller")
+
+    query = (
+        select(
+            Order,
+            Listing.name.label("listing_name"),
+            Buyer.username.label("buyer_username"),
+            Buyer.full_name.label("buyer_full_name"),
+            Seller.username.label("seller_username"),
+            Seller.full_name.label("seller_full_name"),
+            Contract.transaction_id.label("transaction_id")
+        )
+        .join(Listing, Listing.id == Order.listing_id)
+        .join(Buyer, Buyer.id == Order.buyer_id)
+        .join(Seller, Seller.id == Order.seller_id)
+        .outerjoin(Contract, Contract.order_id == Order.id)
+    )
+
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.where(Order.created_at >= start_dt)
+        except ValueError:
+            pass
+
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            query = query.where(Order.created_at < end_dt)
+        except ValueError:
+            pass
+
+    query = query.order_by(Order.created_at.desc())
+    result = await db.execute(query)
+    rows = result.all()
+
+    deals = []
+    for row in rows:
+        order, listing_name, buyer_username, buyer_full_name, seller_username, seller_full_name, transaction_id = row
+        deals.append({
+            "id": str(order.id),
+            "created_at": order.created_at.isoformat(),
+            "quantity_kg": float(order.quantity_kg),
+            "unit_price": float(order.unit_price),
+            "total_amount": float(order.total_amount),
+            "status": order.status,
+            "listing_name": listing_name,
+            "buyer_name": buyer_full_name or buyer_username,
+            "buyer_username": buyer_username,
+            "seller_name": seller_full_name or seller_username,
+            "seller_username": seller_username,
+            "transaction_id": transaction_id or "N/A"
+        })
+    return deals

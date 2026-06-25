@@ -39,6 +39,12 @@ async def place_order(
 
     total = float(listing.final_price) * data.quantity_kg
 
+    # Deduct stock
+    listing.stock_kg = float(listing.stock_kg) - data.quantity_kg
+    if listing.stock_kg <= 0:
+        listing.stock_kg = 0
+        listing.status = "sold_out"
+
     order = Order(
         buyer_id=current_user.id,
         seller_id=listing.seller_id,

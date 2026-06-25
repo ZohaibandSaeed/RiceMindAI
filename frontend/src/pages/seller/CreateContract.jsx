@@ -14,7 +14,8 @@ export default function CreateContract() {
   
   const [form, setForm] = useState({
     delivery_days: '',
-    terms: ''
+    terms: '',
+    seller_phone: ''
   })
 
   useEffect(() => {
@@ -36,13 +37,21 @@ export default function CreateContract() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    const phoneDigits = form.seller_phone.replace(/\D/g, '')
+    if (phoneDigits.length !== 11) {
+      setError("Phone number must be exactly 11 digits")
+      return
+    }
+
     setSubmitting(true)
     setError(null)
     
     try {
       await api.post(`/api/contracts/order/${id}`, {
         delivery_days: parseInt(form.delivery_days),
-        terms: form.terms
+        terms: form.terms,
+        seller_phone: phoneDigits
       })
       navigate('/seller/orders')
     } catch (err) {
@@ -95,6 +104,20 @@ export default function CreateContract() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-zinc-700 mb-1">Your Phone Number (11 Digits)</label>
+            <input 
+              type="text" required
+              value={form.seller_phone}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 11)
+                setForm({...form, seller_phone: val})
+              }}
+              className="w-full px-3 py-2 border border-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1a3d2b]/20 font-bold"
+              placeholder="e.g. 03001234567"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-zinc-700 mb-1">Delivery Duration (Days)</label>
             <input 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import { useClerk, useUser } from '@clerk/clerk-react'
+import api from '../../lib/axios'
 import {
   ShieldAlert,
   LayoutDashboard,
@@ -8,24 +8,54 @@ import {
   CheckSquare,
   LogOut,
   Menu,
-  X
+  X,
+  Inbox,
+  Activity
 } from 'lucide-react'
+
 
 const navItems = [
   { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Control Center' },
   { to: '/admin/pending', icon: CheckSquare, label: 'Pending Listings' },
+  { to: '/admin/stock-requests', icon: Inbox, label: 'Stock Requests' },
+  { to: '/admin/deals', icon: Activity, label: 'Deals Monitor' },
   { to: '/admin/users', icon: Users, label: 'User Directory' },
 ]
 
 export default function AdminLayout() {
-  const { signOut } = useClerk()
-  const { user } = useUser()
+  const [adminUser, setAdminUser] = React.useState(null)
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  React.useEffect(() => {
+    const fetchAdmin = async () => {
+      try {
+        const token = localStorage.getItem('adminAuthToken')
+        if (!token) {
+          navigate('/admin/login')
+          return
+        }
+        const { data } = await api.get('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (data.role !== 'admin') {
+          localStorage.removeItem('adminAuthToken')
+          navigate('/admin/login')
+          return
+        }
+        setAdminUser(data)
+      } catch (err) {
+        console.error("Admin verification failed:", err)
+        localStorage.removeItem('adminAuthToken')
+        navigate('/admin/login')
+      }
+    }
+    fetchAdmin()
+  }, [navigate])
+
   const handleLogout = async () => {
-    await signOut()
-    navigate('/')
+    localStorage.removeItem('adminAuthToken')
+    navigate('/admin/login')
   }
 
   return (
@@ -81,11 +111,11 @@ export default function AdminLayout() {
         <div className="px-5 py-5 border-t border-[#27272a] bg-[#09090b]">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-white font-bold border border-[#27272a]">
-              {user?.firstName?.[0] || 'A'}
+              {adminUser?.username?.[0]?.toUpperCase() || 'A'}
             </div>
             <div className="overflow-hidden">
-              <p className="text-white text-sm font-bold truncate">{user?.firstName} {user?.lastName}</p>
-              <p className="text-zinc-500 text-xs truncate font-medium">{user?.primaryEmailAddress?.emailAddress}</p>
+              <p className="text-white text-sm font-bold truncate">{adminUser?.full_name || adminUser?.username || 'Admin User'}</p>
+              <p className="text-zinc-500 text-xs truncate font-medium">{adminUser?.email || 'admin@ricemind.com'}</p>
             </div>
           </div>
           <button

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot } from 'lucide-react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function DashboardChatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -11,7 +11,7 @@ export default function DashboardChatbot() {
   const [isTyping, setIsTyping] = useState(false);
   
   const messagesEndRef = useRef(null);
-  const { getToken } = useAuth();
+  const { token } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -34,8 +34,7 @@ export default function DashboardChatbot() {
     setMessages(prev => [...prev, { role: 'bot', content: '' }]);
 
     try {
-      const token = await getToken();
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/chat`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -79,6 +78,37 @@ export default function DashboardChatbot() {
     }
   };
 
+  const renderMessageContent = (content) => {
+    const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+      const linkText = match[1];
+      const linkUrl = match[2];
+      parts.push(
+        <a
+          key={match.index}
+          href={linkUrl}
+          className="text-[#c8922a] hover:underline font-extrabold inline-flex items-center gap-0.5"
+        >
+          {linkText}
+        </a>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : content;
+  };
+
   return (
     <div className="fixed bottom-6 right-6 z-50">
       {/* Chat Button */}
@@ -116,7 +146,7 @@ export default function DashboardChatbot() {
                       : 'bg-white border border-zinc-200 text-zinc-800 rounded-tl-sm shadow-sm whitespace-pre-wrap'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'bot' ? renderMessageContent(msg.content) : msg.content}
                 </div>
               </div>
             ))}

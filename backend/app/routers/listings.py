@@ -14,6 +14,7 @@ from app.models.listing import Listing
 from app.models.user import User
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import WalletTransaction
+from app.models.stock_update_request import StockUpdateRequest
 from app.services.ai_service import analyze_rice_listing
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
@@ -224,3 +225,149 @@ async def reject_listing(
     listing.status = "rejected"
     await db.commit()
     return {"message": "Listing rejected."}
+
+
+class StockRequestPayload(BaseModel):
+    requested_stock_kg: float
+
+@router.post("/{listing_id}/stock-request")
+async def request_stock_update(
+    listing_id: uuid.UUID,
+    data: StockRequestPayload,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not isinstance(current_user, User) or current_user.role != "seller":
+        raise HTTPException(status_code=403, detail="Only sellers can request stock updates")
+
+    result = await db.execute(select(Listing).where(Listing.id == listing_id, Listing.seller_id == current_user.id))
+    listing = result.scalars().first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found or you are not the owner")
+
+    # Check for existing pending request
+    pending_check = await db.execute(
+        select(StockUpdateRequest).where(
+            StockUpdateRequest.listing_id == listing_id,
+            StockUpdateRequest.status == "pending"
+        )
+    )
+    if pending_check.scalars().first():
+        raise HTTPException(status_code=400, detail="A pending stock update request already exists for this listing")
+
+    req = StockUpdateRequest(
+        listing_id=listing_id,
+        seller_id=current_user.id,
+        current_stock_kg=listing.stock_kg,
+        requested_stock_kg=data.requested_stock_kg,
+        status="pending"
+    )
+    db.add(req)
+    await db.commit()
+    return {"message": "Stock update request submitted to admin for approval"}
+
+
+@router.get("/stock-requests/mine")
+async def get_my_stock_requests(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not isinstance(current_user, User) or current_user.role != "seller":
+        raise HTTPException(status_code=403, detail="Sellers only")
+
+    # Join with listings to get the listing name
+    result = await db.execute(
+        select(StockUpdateRequest, Listing.name)
+        .join(Listing, Listing.id == StockUpdateRequest.listing_id)
+        .where(StockUpdateRequest.seller_id == current_user.id)
+        .order_by(StockUpdateRequest.created_at.desc())
+    )
+    
+    requests = []
+    for req, listing_name in result.all():
+        requests.append({
+            "id": str(req.id),
+            "listing_id": str(req.listing_id),
+            "listing_name": listing_name,
+            "current_stock_kg": float(req.current_stock_kg),
+            "requested_stock_kg": float(req.requested_stock_kg),
+            "status": req.status,
+            "created_at": req.created_at.isoformat()
+        })
+    return requests
+
+
+@router.get("/stock-requests/pending")
+async def get_pending_stock_requests(
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    # Join with listings and users to get listing name/image and seller username
+    result = await db.execute(
+        select(StockUpdateRequest, Listing, User.username)
+        .join(Listing, Listing.id == StockUpdateRequest.listing_id)
+        .join(User, User.id == StockUpdateRequest.seller_id)
+        .where(StockUpdateRequest.status == "pending")
+        .order_by(StockUpdateRequest.created_at.desc())
+    )
+
+    requests = []
+    for req, listing, username in result.all():
+        requests.append({
+            "id": str(req.id),
+            "listing_id": str(req.listing_id),
+            "listing_name": listing.name,
+            "listing_image": listing.images[0] if listing.images else None,
+            "seller_username": username,
+            "current_stock_kg": float(req.current_stock_kg),
+            "requested_stock_kg": float(req.requested_stock_kg),
+            "status": req.status,
+            "created_at": req.created_at.isoformat()
+        })
+    return requests
+
+
+@router.post("/stock-requests/{request_id}/approve")
+async def approve_stock_request(
+    request_id: uuid.UUID,
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(StockUpdateRequest).where(StockUpdateRequest.id == request_id))
+    req = result.scalars().first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Stock request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Request is already processed")
+
+    listing_result = await db.execute(select(Listing).where(Listing.id == req.listing_id))
+    listing = listing_result.scalars().first()
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    # Update listing stock
+    listing.stock_kg = req.requested_stock_kg
+    if listing.status == "sold_out" and req.requested_stock_kg > 0:
+        listing.status = "approved"
+
+    req.status = "approved"
+    await db.commit()
+    return {"message": "Stock request approved successfully"}
+
+
+@router.post("/stock-requests/{request_id}/reject")
+async def reject_stock_request(
+    request_id: uuid.UUID,
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(StockUpdateRequest).where(StockUpdateRequest.id == request_id))
+    req = result.scalars().first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Stock request not found")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Request is already processed")
+
+    req.status = "rejected"
+    await db.commit()
+    return {"message": "Stock request rejected"}

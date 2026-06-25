@@ -7,11 +7,12 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    clerk_id = Column(String(255), unique=True, nullable=False)
+    clerk_id = Column(String(255), unique=True, nullable=True)
+    password_hash = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, nullable=False)
     username = Column(String(100), unique=True, nullable=False)
     full_name = Column(String(255), nullable=True)
-    role = Column(String(20), nullable=False) # 'buyer' | 'seller' | 'admin'
+    role = Column(String(20), nullable=False) # 'buyer' | 'seller' | 'admin' | 'pending'
     phone = Column(String(30), nullable=True)
     address = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)

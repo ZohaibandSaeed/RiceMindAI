@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { SignInButton, SignUpButton, useAuth } from '@clerk/clerk-react';
-import { motion } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, BrainCircuit, Droplets, Leaf, ArrowRight, CheckCircle2, ChevronRight, Menu, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -19,19 +20,101 @@ const staggerContainer = {
 };
 
 export default function LandingPage() {
-  const { isSignedIn, isLoaded } = useAuth();
+  const { token, login, register, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authModal, setAuthModal] = useState(null); // 'login' | 'signup' | null
+  const [error, setError] = useState(null);
+  const [formLoading, setFormLoading] = useState(false);
 
-  if (!isLoaded) return null;
-  
-  if (isSignedIn) {
-    return <div className="min-h-screen flex items-center justify-center bg-background text-primary text-xl font-medium">Redirecting to Dashboard...</div>;
+  // Form states
+  const [loginData, setLoginData] = useState({ username_or_email: '', password: '' });
+  const [signupData, setSignupData] = useState({
+    username: '',
+    email: '',
+    full_name: '',
+    role: 'buyer',
+    phone: '',
+    address: '',
+    password: ''
+  });
+
+  const navigate = useNavigate();
+
+  if (token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-primary text-xl font-medium">
+        Redirecting to Dashboard...
+      </div>
+    );
   }
+
+  const extractError = (err) => {
+    if (err.response?.data?.detail) {
+      const detail = err.response.data.detail;
+      if (typeof detail === 'string') return detail;
+      if (Array.isArray(detail)) {
+        return detail.map(d => d.msg).join(', ');
+      }
+      return JSON.stringify(detail);
+    }
+    return err.message || "An unexpected error occurred. Please try again.";
+  };
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setFormLoading(true);
+    try {
+      const user = await login(loginData.username_or_email, loginData.password);
+      setAuthModal(null);
+      if (!user.profile_complete) {
+        navigate('/onboarding');
+      } else {
+        navigate(user.role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard');
+      }
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    // Validate username (no spaces allowed)
+    if (/\s/.test(signupData.username)) {
+      setError("Username cannot contain spaces.");
+      return;
+    }
+
+    // Validate phone number (exactly 11 digits)
+    if (!/^\d{11}$/.test(signupData.phone)) {
+      setError("Phone number must be exactly 11 digits (e.g. 03001234567).");
+      return;
+    }
+
+    setFormLoading(true);
+    try {
+      const user = await register(signupData);
+      setAuthModal(null);
+      if (!user.profile_complete) {
+        navigate('/onboarding');
+      } else {
+        navigate(user.role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard');
+      }
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setFormLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background font-sans text-zinc-900 overflow-x-hidden">
       {/* Navigation */}
-      <nav className="fixed w-full z-50 bg-background/80 backdrop-blur-md border-b border-primary/10">
+      <nav className="fixed w-full z-40 bg-background/80 backdrop-blur-md border-b border-primary/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-2">
@@ -44,14 +127,18 @@ export default function LandingPage() {
               <a href="#features" className="text-zinc-600 hover:text-primary transition-colors font-medium">Features</a>
               <a href="#how-it-works" className="text-zinc-600 hover:text-primary transition-colors font-medium">How it Works</a>
               <div className="flex items-center gap-4 ml-4">
-                <SignInButton mode="modal">
-                  <button className="text-primary font-medium hover:text-primary/80 transition-colors">Log In</button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="bg-primary text-background px-5 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-all shadow-md hover:shadow-lg flex items-center gap-2">
-                    Get Started <ArrowRight className="w-4 h-4" />
-                  </button>
-                </SignUpButton>
+                <button 
+                  onClick={() => { setError(null); setAuthModal('login'); }}
+                  className="text-primary font-medium hover:text-primary/80 transition-colors"
+                >
+                  Log In
+                </button>
+                <button 
+                  onClick={() => { setError(null); setAuthModal('signup'); }}
+                  className="bg-primary text-background px-5 py-2.5 rounded-full font-medium hover:bg-primary/90 transition-all shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  Get Started <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
@@ -72,12 +159,18 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-zinc-600 block px-2 py-1">How it Works</a>
               <hr className="border-primary/10" />
               <div className="flex flex-col gap-3">
-                <SignInButton mode="modal">
-                  <button className="w-full text-left px-2 py-1 text-primary font-medium">Log In</button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="w-full bg-primary text-background px-4 py-3 rounded-xl font-medium text-center">Get Started</button>
-                </SignUpButton>
+                <button 
+                  onClick={() => { setMobileMenuOpen(false); setError(null); setAuthModal('login'); }}
+                  className="w-full text-left px-2 py-1 text-primary font-medium"
+                >
+                  Log In
+                </button>
+                <button 
+                  onClick={() => { setMobileMenuOpen(false); setError(null); setAuthModal('signup'); }}
+                  className="w-full bg-primary text-background px-4 py-3 rounded-xl font-medium text-center"
+                >
+                  Get Started
+                </button>
               </div>
             </div>
           </div>
@@ -115,16 +208,18 @@ export default function LandingPage() {
             initial="hidden" animate="visible" variants={fadeIn} transition={{ delay: 0.3 }}
             className="flex flex-col sm:flex-row justify-center gap-4"
           >
-            <SignUpButton mode="modal">
-              <button className="bg-primary text-background px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-all shadow-xl hover:shadow-2xl flex items-center justify-center gap-2 text-lg group">
-                Join the Network <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
-            </SignUpButton>
-            <SignInButton mode="modal">
-              <button className="bg-white border text-primary px-8 py-4 rounded-full font-medium hover:bg-zinc-50 transition-all text-lg shadow-sm hover:shadow-md">
-                Sign In to Account
-              </button>
-            </SignInButton>
+            <button 
+              onClick={() => { setError(null); setAuthModal('signup'); }}
+              className="bg-primary text-background px-8 py-4 rounded-full font-medium hover:bg-primary/90 transition-all shadow-xl hover:shadow-2xl flex items-center justify-center gap-2 text-lg group"
+            >
+              Join the Network <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+            <button 
+              onClick={() => { setError(null); setAuthModal('login'); }}
+              className="bg-white border text-primary px-8 py-4 rounded-full font-medium hover:bg-zinc-50 transition-all text-lg shadow-sm hover:shadow-md"
+            >
+              Sign In to Account
+            </button>
           </motion.div>
         </div>
       </section>
@@ -159,7 +254,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-bold text-primary mb-3">Secure Escrow Wallet</h3>
               <p className="text-zinc-600 leading-relaxed">
-                Payments are securely held in our platform's dummy escrow. Funds are only released to the seller once the buyer confirms successful delivery.
+                Payments are securely held in our platform's escrow. Funds are only released to the seller once the buyer confirms successful delivery.
               </p>
             </motion.div>
 
@@ -241,13 +336,14 @@ export default function LandingPage() {
       <section className="py-24 bg-background text-center px-4">
         <h2 className="text-4xl font-serif font-bold text-primary mb-6">Ready to Experience the Future?</h2>
         <p className="text-zinc-600 text-lg mb-10 max-w-xl mx-auto">
-          Join hundreds of trusted buyers and sellers on RiceMindAI today.
+          Join trusted buyers and sellers on RiceMindAI today.
         </p>
-        <SignUpButton mode="modal">
-          <button className="bg-accent text-white px-10 py-5 rounded-full font-bold text-lg hover:bg-accent/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1">
-            Create Your Free Account
-          </button>
-        </SignUpButton>
+        <button 
+          onClick={() => { setError(null); setAuthModal('signup'); }}
+          className="bg-accent text-white px-10 py-5 rounded-full font-bold text-lg hover:bg-accent/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1"
+        >
+          Create Your Free Account
+        </button>
       </section>
 
       {/* Footer */}
@@ -265,6 +361,193 @@ export default function LandingPage() {
           <p>© {new Date().getFullYear()} RiceMindAI. All rights reserved.</p>
         </div>
       </footer>
+
+      {/* Modern Custom Auth Modal */}
+      <AnimatePresence>
+        {authModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAuthModal(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            {/* Modal Box */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl border border-zinc-200 overflow-hidden z-10"
+            >
+              {/* Top Row / Tabs */}
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => { setError(null); setAuthModal('login'); }}
+                    className={`text-xl font-bold font-serif transition ${authModal === 'login' ? 'text-primary border-b-2 border-primary' : 'text-zinc-400'}`}
+                  >
+                    Login
+                  </button>
+                  <button 
+                    onClick={() => { setError(null); setAuthModal('signup'); }}
+                    className={`text-xl font-bold font-serif transition ${authModal === 'signup' ? 'text-primary border-b-2 border-primary' : 'text-zinc-400'}`}
+                  >
+                    Register
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setAuthModal(null)}
+                  className="p-1 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-zinc-800 transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium">
+                  {error}
+                </div>
+              )}
+
+              {/* Login Form */}
+              {authModal === 'login' && (
+                <form onSubmit={handleLoginSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Username or Email</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={loginData.username_or_email}
+                      onChange={(e) => setLoginData({ ...loginData, username_or_email: e.target.value })}
+                      className="w-full p-3 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="Enter username or email"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Password</label>
+                    <input 
+                      type="password" 
+                      required 
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                      className="w-full p-3 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <button 
+                    disabled={formLoading} 
+                    type="submit" 
+                    className="w-full py-3 bg-primary text-background font-medium rounded-xl hover:bg-primary/95 transition shadow-lg disabled:opacity-70 mt-6"
+                  >
+                    {formLoading ? "Signing In..." : "Sign In"}
+                  </button>
+                </form>
+              )}
+
+              {/* Signup Form */}
+              {authModal === 'signup' && (
+                <form onSubmit={handleSignupSubmit} className="space-y-3 overflow-y-auto max-h-[70vh] pr-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Username</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={signupData.username}
+                      onChange={(e) => setSignupData({ ...signupData, username: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="johndoe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      required 
+                      value={signupData.email}
+                      onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Full Name</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={signupData.full_name}
+                      onChange={(e) => setSignupData({ ...signupData, full_name: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">I want to...</label>
+                    <div className="flex gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => setSignupData({ ...signupData, role: 'buyer' })}
+                        className={`flex-1 py-2 px-3 border rounded-xl font-medium text-sm transition ${signupData.role === 'buyer' ? 'bg-primary/5 border-primary text-primary' : 'hover:bg-zinc-50'}`}
+                      >
+                        Buy Rice
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setSignupData({ ...signupData, role: 'seller' })}
+                        className={`flex-1 py-2 px-3 border rounded-xl font-medium text-sm transition ${signupData.role === 'seller' ? 'bg-primary/5 border-primary text-primary' : 'hover:bg-zinc-50'}`}
+                      >
+                        Sell Rice
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Phone</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={signupData.phone}
+                      onChange={(e) => setSignupData({ ...signupData, phone: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="+92 300 1234567"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Address</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={signupData.address}
+                      onChange={(e) => setSignupData({ ...signupData, address: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="Address or Market location"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Password</label>
+                    <input 
+                      type="password" 
+                      required 
+                      value={signupData.password}
+                      onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                      className="w-full p-2.5 border border-zinc-200 rounded-xl outline-none focus:border-primary focus:ring-1 focus:ring-primary transition"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <button 
+                    disabled={formLoading} 
+                    type="submit" 
+                    className="w-full py-3 bg-primary text-background font-medium rounded-xl hover:bg-primary/95 transition shadow-lg disabled:opacity-70 mt-4"
+                  >
+                    {formLoading ? "Creating Account..." : "Create Account"}
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

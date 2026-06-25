@@ -1,15 +1,15 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useUser } from '@clerk/clerk-react'
+import { useAuth } from '../context/AuthContext'
 import api from '../lib/axios'
 
 export default function OnboardingPage() {
-  const { user } = useUser()
+  const { user, setUser } = useAuth()
   const navigate = useNavigate()
   const [formData, setFormData] = useState({
     role: 'buyer',
-    username: user?.username || user?.firstName || '',
-    full_name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+    username: user?.username || '',
+    full_name: user?.full_name || '',
     phone: '',
     address: ''
   })
@@ -22,12 +22,25 @@ export default function OnboardingPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
-    
+
+    // Validate username (no spaces allowed)
+    if (/\s/.test(formData.username)) {
+      setError("Username cannot contain spaces.")
+      return;
+    }
+
+    // Validate phone number (exactly 11 digits)
+    if (!/^\d{11}$/.test(formData.phone)) {
+      setError("Phone number must be exactly 11 digits (e.g. 03001234567).")
+      return;
+    }
+
+    setLoading(true)
     try {
-      await api.put('/api/auth/complete-profile', formData)
+      const { data } = await api.put('/api/auth/complete-profile', formData)
       localStorage.setItem('userRole', formData.role)
+      setUser(data) // update local user context state
       navigate(formData.role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to update profile. Try again.")

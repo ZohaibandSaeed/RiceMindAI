@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
-import { useUser, useAuth } from '@clerk/clerk-react'
-import api from './lib/axios'
+import { useAuth } from './context/AuthContext'
 
 import LandingPage from './pages/LandingPage'
 import OnboardingPage from './pages/OnboardingPage'
@@ -17,6 +16,7 @@ import MyListings from './pages/seller/MyListings'
 import SellerOrders from './pages/seller/SellerOrders'
 import SellerWallet from './pages/seller/SellerWallet'
 import CreateContract from './pages/seller/CreateContract'
+import SellerTracker from './pages/seller/SellerTracker'
 
 // Buyer Pages
 import BuyerDashboard from './pages/buyer/BuyerDashboard'
@@ -24,12 +24,13 @@ import BrowseListings from './pages/buyer/BrowseListings'
 import ListingDetail from './pages/buyer/ListingDetail'
 import BuyerOrders from './pages/buyer/BuyerOrders'
 import BuyerWallet from './pages/buyer/BuyerWallet'
+import BuyerTracker from './pages/buyer/BuyerTracker'
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  const { isLoaded, isSignedIn } = useAuth()
-  if (!isLoaded) return <div className="flex h-screen items-center justify-center">Loading...</div>
-  if (!isSignedIn) return <Navigate to="/" replace />
+  const { token, loading } = useAuth()
+  if (loading) return <div className="flex h-screen items-center justify-center font-semibold text-[#1a3d2b]">Loading...</div>
+  if (!token) return <Navigate to="/" replace />
   return children
 }
 
@@ -44,50 +45,22 @@ const RoleGuard = ({ allowedRole, children }) => {
 }
 
 function AppRoutes() {
-  const { user, isLoaded, isSignedIn } = useUser()
-  const { getToken } = useAuth()
+  const { user, token, loading } = useAuth()
   const navigate = useNavigate()
-  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
-    const syncUser = async () => {
-      if (isSignedIn && user) {
-        setIsSyncing(true)
-        try {
-          const clerkData = {
-            email: user.primaryEmailAddress?.emailAddress,
-            username: user.username || user.firstName,
-            full_name: `${user.firstName} ${user.lastName}`,
-          }
-          const token = await getToken()
-          const { data } = await api.post('/api/auth/sync', clerkData, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          
-          localStorage.setItem('userRole', data.role)
-
-          if (!data.profile_complete) {
-            navigate('/onboarding')
-          } else {
-            if (window.location.pathname === '/' || window.location.pathname.includes('buyer') && data.role === 'seller' || window.location.pathname.includes('seller') && data.role === 'buyer') {
-              navigate(data.role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard')
-            }
-          }
-        } catch (error) {
-          console.error("Failed to sync user:", error)
-        } finally {
-          setIsSyncing(false)
+    if (token && user) {
+      if (!user.profile_complete) {
+        navigate('/onboarding')
+      } else {
+        if (window.location.pathname === '/' || (window.location.pathname.includes('buyer') && user.role === 'seller') || (window.location.pathname.includes('seller') && user.role === 'buyer')) {
+          navigate(user.role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard')
         }
       }
     }
+  }, [token, user, navigate])
 
-    if (isLoaded) {
-      window.Clerk = { session: { getToken } }
-      syncUser()
-    }
-  }, [isLoaded, isSignedIn, user, navigate, getToken])
-
-  if (!isLoaded || isSyncing) return (
+  if (loading) return (
     <div className="flex h-screen items-center justify-center font-semibold text-[#1a3d2b]">
       Loading RiceMindAI...
     </div>
@@ -110,6 +83,7 @@ function AppRoutes() {
         <Route path="orders" element={<SellerOrders />} />
         <Route path="orders/:id/create-contract" element={<CreateContract />} />
         <Route path="wallet" element={<SellerWallet />} />
+        <Route path="tracker" element={<SellerTracker />} />
       </Route>
 
       {/* Buyer Routes */}
@@ -120,6 +94,7 @@ function AppRoutes() {
         <Route path="listing/:id" element={<ListingDetail />} />
         <Route path="orders" element={<BuyerOrders />} />
         <Route path="wallet" element={<BuyerWallet />} />
+        <Route path="tracker" element={<BuyerTracker />} />
       </Route>
     </Routes>
   )

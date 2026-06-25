@@ -1,20 +1,11 @@
 from fastapi import Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-import jwt
-import httpx
-import ssl
-import certifi
+import uuid
 
 from app.database import get_db
-from app.config import settings
 from app.models.user import User
-
-# Fetch JWKS using httpx (bypasses macOS SSL issue)
-async def fetch_jwks():
-    async with httpx.AsyncClient() as client:
-        response = await client.get(settings.CLERK_JWKS_URL)
-        return response.json()
+from app.services.auth_utils import decode_access_token
 
 async def get_current_user(authorization: str = Header(None), db: AsyncSession = Depends(get_db)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -26,41 +17,43 @@ async def get_current_user(authorization: str = Header(None), db: AsyncSession =
     token = authorization.split(" ")[1]
     
     try:
-        # Get JWKS keys from Clerk using httpx (no SSL issue)
-        jwks_data = await fetch_jwks()
+        # Decode and verify the local token
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token signature verification failed or token expired",
+            )
         
-        # Get the kid from token header
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing subject payload",
+            )
         
-        # Find matching key
-        public_key = None
-        for key_data in jwks_data.get("keys", []):
-            if key_data.get("kid") == kid:
-                from jwt.algorithms import RSAAlgorithm
-                public_key = RSAAlgorithm.from_jwk(key_data)
-                break
+        # Try parsing user_id as UUID
+        try:
+            user_id = uuid.UUID(user_id_str)
+        except ValueError:
+            # Fallback if user_id is a clerk_id string in older tokens
+            result = await db.execute(select(User).where(User.clerk_id == user_id_str))
+            user = result.scalars().first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found",
+                )
+            return user
         
-        if not public_key:
-            raise HTTPException(status_code=401, detail="No matching key found")
-        
-        # Decode and verify token
-        data = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            options={"verify_aud": False}
-        )
-        
-        clerk_id = data.get("sub")
-        if not clerk_id:
-            raise HTTPException(status_code=401, detail="Token missing subject")
-        
-        result = await db.execute(select(User).where(User.clerk_id == clerk_id))
+        result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalars().first()
         
         if not user:
-            return {"clerk_id": clerk_id, "email": data.get("email", "")}
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
             
         return user
     except HTTPException:

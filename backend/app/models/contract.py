@@ -19,6 +19,8 @@ class Contract(Base):
     seller_signed = Column(Boolean, default=True)
     buyer_signed = Column(Boolean, default=False)
     buyer_signed_at = Column(DateTime, nullable=True)
+    seller_phone = Column(String(20), nullable=True)
+    buyer_phone = Column(String(20), nullable=True)
     status = Column(String(30), default='pending_buyer')
     # pending_buyer | active | completed
     created_at = Column(DateTime, default=func.now())

@@ -12,7 +12,7 @@ from app.dependencies import get_current_user
 from app.models.contract import Contract
 from app.models.order import Order
 from app.models.user import User
-from app.schemas.contract import ContractCreateRequest, ContractResponse
+from app.schemas.contract import ContractCreateRequest, ContractResponse, SignContractRequest
 from app.services.wallet_service import hold_funds_in_escrow
 
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
@@ -47,6 +47,10 @@ async def create_contract(
     if existing:
         raise HTTPException(status_code=400, detail="Contract already exists for this order")
 
+    seller_phone_digits = ''.join(filter(str.isdigit, data.seller_phone))
+    if len(seller_phone_digits) != 11:
+        raise HTTPException(status_code=400, detail="Seller phone number must be exactly 11 digits")
+
     delivery_deadline = datetime.utcnow() + timedelta(days=data.delivery_days)
     transaction_id = generate_transaction_id()
 
@@ -59,6 +63,7 @@ async def create_contract(
         delivery_deadline=delivery_deadline,
         total_amount=order.total_amount,
         terms=data.terms,
+        seller_phone=seller_phone_digits,
         seller_signed=True,
         buyer_signed=False,
         status="pending_buyer"
@@ -97,11 +102,16 @@ async def get_contract_by_order(
 @router.put("/{contract_id}/sign")
 async def sign_contract(
     contract_id: uuid.UUID,
+    data: SignContractRequest,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     if not isinstance(current_user, User) or current_user.role != "buyer":
         raise HTTPException(status_code=403, detail="Only buyers can sign contracts")
+
+    buyer_phone_digits = ''.join(filter(str.isdigit, data.buyer_phone))
+    if len(buyer_phone_digits) != 11:
+        raise HTTPException(status_code=400, detail="Buyer phone number must be exactly 11 digits")
 
     contract_q = await db.execute(select(Contract).where(Contract.id == contract_id, Contract.buyer_id == current_user.id))
     contract = contract_q.scalars().first()
@@ -123,6 +133,7 @@ async def sign_contract(
     # If hold is successful, update resources
     contract.buyer_signed = True
     contract.buyer_signed_at = datetime.utcnow()
+    contract.buyer_phone = buyer_phone_digits
     contract.status = "active"
 
     order.status = "payment_held"
